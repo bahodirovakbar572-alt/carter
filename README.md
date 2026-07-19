@@ -37,7 +37,7 @@ npm start
 | `/start` | hamma | Botni ishga tushirish, salomlashish |
 | `/all` | faqat guruh adminlari | Bot eslab qolgan **barcha** a'zolarni tag qiladi |
 | `/here` | faqat guruh adminlari | Faqat so'nggi **10 daqiqada** yozgan a'zolarni tag qiladi |
-| `/call [sabab]` | faqat guruh adminlari | Har bir a'zoni o'zining shaxsiy stikeri (agar o'rnatgan bo'lsa) + ismi bilan chaqiradi. Sabab ixtiyoriy: `/call ertalabki majlis` kabi yozilsa, har bir xabarga qo'shiladi |
+| `/call [sabab]` | faqat guruh adminlari | Bot eslab qolgan a'zolarni **5 tadan guruhlab**, har bir xabarda username(lar) va sababni birga chiqaradi (masalan `/call ertalabki majlis boshlanadi`) |
 | `/somecall <ism/@username>` yoki xabarga reply | hamma | Bitta odamni aniq ism va username orqali chaqiradi |
 | `/notag` | hamma | O'zini tag qilinishdan chiqaradi yoki qaytadan yoqadi (toggle) |
 | `/setsticker` | hamma | Stikerga reply qilib yuborilsa, o'sha stikerni sizning "chaqiruv stikeri"ngiz qilib saqlaydi |
@@ -48,7 +48,7 @@ npm start
 - **Cheklov:** Telegram Bot API guruhning to'liq a'zolar ro'yxatini bermaydi — bot faqat **guruhda haqiqatan yozgan** kishilarni "eslab qoladi". Bu Telegramning o'zi qo'ygan cheklov.
 - **Cooldown:** `/all`, `/here`, `/call` — har birini bir guruhda faqat **1 daqiqada bir marta** ishlatish mumkin (spamning oldini olish uchun).
 - **Shaffoflik:** `/call` stikerni ismi bilan birga yuboradi — kim kimni chaqirayotgani har doim ko'rinib turadi, "yashirin" chaqiriq yo'q.
-- **`/setsticker` qanday ishlatiladi:** avval guruhga istalgan stikerni yuboring, keyin o'sha stiker xabariga **javob (reply)** qilib `/setsticker` deb yozing.
+- **`/setsticker` qanday ishlatiladi:** avval guruhga istalgan stikerni yuboring, keyin o'sha stiker xabariga **javob (reply)** qilib `/setsticker` deb yozing. *(Eslatma: hozircha `/call` bu stikerlardan foydalanmaydi — u shunchaki username va sababni birgalikda chiqaradi. Agar kelajakda stikerlarni ham ishlatishni xohlasangiz, ayting.)*
 - **`/somecall` qanday ishlatiladi:** kimningdir xabariga reply qilib `/somecall` yozing, yoki `/somecall Ali` yoki `/somecall @username` kabi yozing.
 - Ma'lumotlar (`users.json`) serverda saqlanadi; Render'da qayta deploy qilinganda tozalanishi mumkin.
 

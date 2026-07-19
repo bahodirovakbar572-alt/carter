@@ -201,8 +201,10 @@ bot.onText(/^\/here/, async (msg) => {
   await sendChunkedMentions(chatId, mentions, 'So\'nggi 10 daqiqada hech kim yozmadi.');
 });
 
-// ------- /call [sabab] — o'rnatilgan stikerlar orqali chaqirish (stiker + ism, faqat adminlar) -------
-// Sabab yozish ixtiyoriy: /call ertalabki majlis kabi yozilsa, har bir xabarga qo'shiladi
+// ------- /call [sabab] — bir nechta odamni bitta xabarda, sababi bilan birga chaqirish -------
+// Masalan: /call ertalabki majlis boshlanadi
+const CALL_GROUP_SIZE = 5; // bitta xabarda nechta odam tag qilinishi
+
 bot.onText(/^\/call(?:\s+(.+))?/, async (msg, match) => {
   const chatId = msg.chat.id;
   if (msg.chat.type !== 'group' && msg.chat.type !== 'supergroup') {
@@ -217,32 +219,20 @@ bot.onText(/^\/call(?:\s+(.+))?/, async (msg, match) => {
   }
 
   const reason = match && match[1] ? match[1].trim() : null;
-  const reasonSuffix = reason ? `\n📝 ${escapeHtml(reason)}` : '';
+  const reasonLine = reason ? `\n📝 ${escapeHtml(reason)}` : '';
 
   const users = getUsers(chatId).filter((u) => !u.optOut);
   if (users.length === 0) {
     return bot.sendMessage(chatId, 'Tag qilinadigan kishi yo\'q.');
   }
 
-  const withSticker = users.filter((u) => u.sticker);
-  const withoutSticker = users.filter((u) => !u.sticker);
-
-  // Stikerli foydalanuvchilar: stiker + ism (+ sabab, agar yozilgan bo'lsa)
-  for (const u of withSticker) {
-    try {
-      await bot.sendSticker(chatId, u.sticker);
-      await bot.sendMessage(chatId, `${mentionHtml(u)}${reasonSuffix}`, { parse_mode: 'HTML' });
-      await sleep(400); // Telegram limitiga tegib qolmaslik uchun kichik pauza
-    } catch (err) {
-      console.error('Stiker yuborishda xatolik:', err.message);
-    }
-  }
-
-  // Stikeri yo'qlar — oddiy tag qilinadi, sababi bitta umumiy xabar oxirida ko'rsatiladi
-  if (withoutSticker.length > 0) {
-    await sendChunkedMentions(chatId, withoutSticker.map(mentionHtml), '');
-    if (reason) {
-      await bot.sendMessage(chatId, `📝 ${escapeHtml(reason)}`);
+  // Har bir xabarda CALL_GROUP_SIZE tadan odam + sababi birga chiqadi
+  for (let i = 0; i < users.length; i += CALL_GROUP_SIZE) {
+    const group = users.slice(i, i + CALL_GROUP_SIZE);
+    const mentions = group.map(mentionHtml).join(' ');
+    await bot.sendMessage(chatId, `${mentions}${reasonLine}`, { parse_mode: 'HTML' });
+    if (i + CALL_GROUP_SIZE < users.length) {
+      await sleep(300); // Telegram limitiga tegib qolmaslik uchun kichik pauza
     }
   }
 });
