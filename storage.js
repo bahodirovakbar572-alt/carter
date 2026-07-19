@@ -28,15 +28,25 @@ function saveData() {
   }, 1000);
 }
 
-// Guruhda yozgan foydalanuvchini eslab qolish
-function rememberUser(chatId, user) {
-  if (!user || user.is_bot) return;
+function ensureChat(chatId) {
   const chatKey = String(chatId);
   if (!data[chatKey]) data[chatKey] = {};
-  data[chatKey][String(user.id)] = {
+  return chatKey;
+}
+
+// Guruhda yozgan foydalanuvchini eslab qolish (va oxirgi faollik vaqtini yangilash)
+function rememberUser(chatId, user) {
+  if (!user || user.is_bot) return;
+  const chatKey = ensureChat(chatId);
+  const key = String(user.id);
+  const existing = data[chatKey][key] || {};
+  data[chatKey][key] = {
     id: user.id,
-    first_name: user.first_name || '',
-    username: user.username || null,
+    first_name: user.first_name || existing.first_name || '',
+    username: user.username || existing.username || null,
+    lastSeen: Date.now(),
+    optOut: existing.optOut || false,
+    sticker: existing.sticker || null,
   };
   saveData();
 }
@@ -47,4 +57,46 @@ function getUsers(chatId) {
   return data[chatKey] ? Object.values(data[chatKey]) : [];
 }
 
-module.exports = { rememberUser, getUsers };
+// Faqat so'nggi X millisekund ichida yozganlarni olish
+function getActiveUsers(chatId, sinceMs) {
+  const cutoff = Date.now() - sinceMs;
+  return getUsers(chatId).filter((u) => u.lastSeen && u.lastSeen >= cutoff);
+}
+
+// Tag qilinishdan bosh tortish holatini almashtirish (toggle)
+function toggleOptOut(chatId, userId) {
+  const chatKey = ensureChat(chatId);
+  const key = String(userId);
+  if (!data[chatKey][key]) return null;
+  data[chatKey][key].optOut = !data[chatKey][key].optOut;
+  saveData();
+  return data[chatKey][key].optOut;
+}
+
+// Foydalanuvchining shaxsiy "chaqiruv stikeri"ni saqlash
+function setSticker(chatId, userId, fileId) {
+  const chatKey = ensureChat(chatId);
+  const key = String(userId);
+  if (!data[chatKey][key]) return false;
+  data[chatKey][key].sticker = fileId;
+  saveData();
+  return true;
+}
+
+// Shu chat uchun statistika
+function getStats(chatId) {
+  const users = getUsers(chatId);
+  const optedOut = users.filter((u) => u.optOut).length;
+  const activeLast10Min = getActiveUsers(chatId, 10 * 60 * 1000).length;
+  const withSticker = users.filter((u) => u.sticker).length;
+  return { total: users.length, optedOut, activeLast10Min, withSticker };
+}
+
+module.exports = {
+  rememberUser,
+  getUsers,
+  getActiveUsers,
+  toggleOptOut,
+  setSticker,
+  getStats,
+};
