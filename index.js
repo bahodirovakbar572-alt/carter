@@ -47,14 +47,14 @@ async function isAdmin(chatId, userId) {
 
 // Har bir chat + buyruq uchun cooldown (spamning oldini olish)
 const cooldowns = new Map();
-const COOLDOWN_MS = 60 * 1000; // 1 daqiqa
+const COOLDOWN_MS = 10 * 1000; // Sinov uchun 10 soniyaga tushirildi
 
 function checkCooldown(chatId, command) {
   const key = `${chatId}:${command}`;
   const last = cooldowns.get(key) || 0;
   const now = Date.now();
   if (now - last < COOLDOWN_MS) {
-    return Math.ceil((COOLDOWN_MS - (now - last)) / 1000); // qolgan soniya
+    return Math.ceil((COOLDOWN_MS - (now - last)) / 1000);
   }
   cooldowns.set(key, now);
   return 0;
@@ -66,7 +66,7 @@ function sleep(ms) {
 
 // ------- /start -------
 bot.onText(/^\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, 'Salom! Bot ishga tushdi ✅');
+  bot.sendMessage(msg.chat.id, 'Salom! Bot ishga tushdi va guruhlarni kuzatishga tayyor ✅');
 });
 
 // ------- Har bir guruh xabarini kuzatib, yuboruvchini eslab qolish -------
@@ -83,23 +83,20 @@ bot.on('message', (msg) => {
   }
 });
 
-// ------- /notag — tag qilinishdan bosh tortish (toggle) -------
+// ------- /notag — tag qilinishdan bosh tortish -------
 bot.onText(/^\/notag/, (msg) => {
   if (msg.chat.type === 'private') {
     return bot.sendMessage(msg.chat.id, 'Bu buyruq faqat guruhda ishlaydi.');
   }
   const optedOut = toggleOptOut(msg.chat.id, msg.from.id);
   if (optedOut === null) {
-    return bot.sendMessage(
-      msg.chat.id,
-      'Avval guruhda birror xabar yozing, keyin bu buyruqni ishlating.'
-    );
+    return bot.sendMessage(msg.chat.id, 'Avval guruhda biror xabar yozing.');
   }
   bot.sendMessage(
     msg.chat.id,
     optedOut
-      ? `${mentionHtml(msg.from)}, endi sizni tag qilishmaydi.`
-      : `${mentionHtml(msg.from)}, endi sizni yana tag qilish mumkin.`,
+      ? `${mentionHtml(msg.from)}, endi sizni ommaviy chaqirishganda notif bormaydi.`
+      : `${mentionHtml(msg.from)}, siz yana ro'yxatga qo'shildingiz.`,
     { parse_mode: 'HTML' }
   );
 });
@@ -112,47 +109,25 @@ bot.onText(/^\/stats/, (msg) => {
   const s = getStats(msg.chat.id);
   bot.sendMessage(
     msg.chat.id,
-    `📊 Statistika:\n` +
-      `Jami eslab qolingan: ${s.total}\n` +
+    `📊 Guruh statistikasi:\n` +
+      `Jami eslab qolingan faollar: ${s.total}\n` +
       `So'nggi 10 daqiqada faol: ${s.activeLast10Min}\n` +
-      `Tag qilinishdan bosh tortganlar: ${s.optedOut}\n` +
-      `Stiker o'rnatganlar: ${s.withSticker}`
+      `Chaqirilishni istamaganlar: ${s.optedOut}`
   );
 });
 
-// ------- /setsticker — o'z chaqiruv stikeringizni o'rnatish -------
-bot.onText(/^\/setsticker/, (msg) => {
-  if (msg.chat.type === 'private') {
-    return bot.sendMessage(msg.chat.id, 'Bu buyruq faqat guruhda ishlaydi.');
-  }
-  if (!msg.reply_to_message || !msg.reply_to_message.sticker) {
-    return bot.sendMessage(
-      msg.chat.id,
-      'Avval guruhga biror stiker yuboring, keyin o\'sha stikerga javob (reply) tariqasida /setsticker deb yozing.'
-    );
-  }
-  const ok = setSticker(msg.chat.id, msg.from.id, msg.reply_to_message.sticker.file_id);
-  if (!ok) {
-    return bot.sendMessage(
-      msg.chat.id,
-      'Avval guruhda oddiy matnli xabar yozing, keyin qayta urinib ko\'ring.'
-    );
-  }
-  bot.sendMessage(msg.chat.id, `${mentionHtml(msg.from)} uchun chaqiruv stikeri o'rnatildi ✅`, {
-    parse_mode: 'HTML',
-  });
-});
-
-// ------- /all va /here uchun stiker ostiga yashirincha tag qilish funksiyasi -------
-async function sendStickerMentions(chatId, users) {
+// ------- Rasmli/Yashirin chaqiruv funksiyasi (Asosiy Logika) -------
+async function sendHiddenMentions(chatId, users) {
   if (users.length === 0) {
     return bot.sendMessage(chatId, 'Tag qilinadigan kishi yo\'q.');
   }
 
-  // Standart stiker ID (Agar /setsticker ishlatilmagan bo'lsa shuni yuboradi)
-  const DEFAULT_STICKER = "CAACAgIAAxkBAAEExxxxxx..."; 
-  const INVISIBLE_CHAR = "‌"; // Nol kenglikdagi bo'shliq
-  const CALL_GROUP_SIZE = 5;  // Har bir stikerga 5 tadan odam yashiriladi
+  // Bu ochiq internetdagi 1x1 pikselli butunlay shaffof (transparent) rasm linki.
+  // Guruhda deyarli sezilmaydi, lekin ostiga HTML yashirishga yordam beradi.
+  // Agar xohlasangiz, istalgan boshqa rasm URL manzilini qo'yishingiz mumkin.
+  const TRANSPARENT_PHOTO = "https://upload.wikimedia.org/wikipedia/commons/c/ca/1x1.png"; 
+  const INVISIBLE_CHAR = "‌"; // Nol kenglikdagi ko'rinmas bo'shliq simvoli
+  const CALL_GROUP_SIZE = 5;  // Telegram limitidan oshmaslik uchun 5 tadan bo'lib tag qilamiz
 
   for (let i = 0; i < users.length; i += CALL_GROUP_SIZE) {
     const group = users.slice(i, i + CALL_GROUP_SIZE);
@@ -163,24 +138,23 @@ async function sendStickerMentions(chatId, users) {
     }
 
     try {
-      // Guruh yoki guruhdagi oxirgi foydalanuvchining shaxsiy stikeri borligini tekshirish mantig'i
-      // Agar storage'da guruh uchun stiker saqlangan bo'lsa uni yuklash mumkin, hozircha defolt:
-      await bot.sendSticker(chatId, DEFAULT_STICKER, {
+      // sendPhoto funksiyasi tarkibida caption va HTML formati 100% ishlaydi
+      await bot.sendPhoto(chatId, TRANSPARENT_PHOTO, {
         caption: hiddenMentions,
         parse_mode: 'HTML'
       });
       
-      // Telegram spam filtri (FloodWait) ga tushmaslik uchun 1 soniya kutish
+      // Spam-filtr (FloodWait) cheklovini aylanib o'tish
       if (i + CALL_GROUP_SIZE < users.length) {
         await sleep(1000);
       }
     } catch (err) {
-      console.error('Stiker yuborishda xatolik:', err.message);
+      console.error('Chaqiruv xabari yuborishda xatolik:', err.message);
     }
   }
 }
 
-// ------- /all — hamma a'zolarni stiker ostiga yashirib chaqirish (faqat adminlar) -------
+// ------- /all — Hamma a'zolarni yashirincha chaqirish (Adminlar uchun) -------
 bot.onText(/^\/all/, async (msg) => {
   const chatId = msg.chat.id;
   if (msg.chat.type !== 'group' && msg.chat.type !== 'supergroup') {
@@ -191,14 +165,14 @@ bot.onText(/^\/all/, async (msg) => {
   }
   const waitSec = checkCooldown(chatId, 'all');
   if (waitSec > 0) {
-    return bot.sendMessage(chatId, `Iltimos, ${waitSec} soniyadan keyin qayta urinib ko'ring.`);
+    return bot.sendMessage(chatId, `Sekinroq yozing! ${waitSec} soniyadan keyin qayta urining.`);
   }
 
   const users = getUsers(chatId).filter((u) => !u.optOut);
-  await sendStickerMentions(chatId, users);
+  await sendHiddenMentions(chatId, users);
 });
 
-// ------- /here — faqat faollarni stiker ostiga yashirib chaqirish (faqat adminlar) -------
+// ------- /here — Faol a'zolarni yashirincha chaqirish (Adminlar uchun) -------
 bot.onText(/^\/here/, async (msg) => {
   const chatId = msg.chat.id;
   if (msg.chat.type !== 'group' && msg.chat.type !== 'supergroup') {
@@ -209,14 +183,14 @@ bot.onText(/^\/here/, async (msg) => {
   }
   const waitSec = checkCooldown(chatId, 'here');
   if (waitSec > 0) {
-    return bot.sendMessage(chatId, `Iltimos, ${waitSec} soniyadan keyin qayta urinib ko'ring.`);
+    return bot.sendMessage(chatId, `Sekinroq yozing! ${waitSec} soniyadan keyin qayta urining.`);
   }
 
   const users = getActiveUsers(chatId, 10 * 60 * 1000).filter((u) => !u.optOut);
-  await sendStickerMentions(chatId, users);
+  await sendHiddenMentions(chatId, users);
 });
 
-// ------- /call — stiker yordamida ommaviy chaqiruv buyrug'i -------
+// ------- /call — Standart ommaviy chaqiruv buyrug'i -------
 bot.onText(/^\/call/, async (msg) => {
   const chatId = msg.chat.id;
   if (msg.chat.type !== 'group' && msg.chat.type !== 'supergroup') {
@@ -227,68 +201,11 @@ bot.onText(/^\/call/, async (msg) => {
   }
   const waitSec = checkCooldown(chatId, 'call');
   if (waitSec > 0) {
-    return bot.sendMessage(chatId, `Iltimos, ${waitSec} soniyadan keyin qayta urinib ko'ring.`);
+    return bot.sendMessage(chatId, `Iltimos, ${waitSec} soniya kuting.`);
   }
 
   const users = getUsers(chatId).filter((u) => !u.optOut);
-  await sendStickerMentions(chatId, users);
-});
-
-// ------- /somecall — bitta odamni yashirincha stiker bilan chaqirish -------
-bot.onText(/^\/somecall(?:\s+(.+))?/, async (msg, match) => {
-  const chatId = msg.chat.id;
-  if (msg.chat.type !== 'group' && msg.chat.type !== 'supergroup') {
-    return bot.sendMessage(chatId, 'Bu buyruq faqat guruhlarda ishlaydi.');
-  }
-
-  let target = null;
-
-  if (msg.reply_to_message && msg.reply_to_message.from) {
-    const replyUser = msg.reply_to_message.from;
-    target = getUsers(chatId).find((u) => u.id === replyUser.id);
-  } else if (match && match[1]) {
-    const query = match[1].trim().replace(/^@/, '').toLowerCase();
-    const candidates = getUsers(chatId).filter(
-      (u) =>
-        (u.username && u.username.toLowerCase() === query) ||
-        (u.first_name && u.first_name.toLowerCase().includes(query))
-    );
-    if (candidates.length > 1) {
-      return bot.sendMessage(
-        chatId,
-        `Bir nechta mos kishi topildi, aniqroq yozing yoki xabarga javob (reply) qiling:\n` +
-          candidates.map((u) => `- ${u.first_name}${u.username ? ' (@' + u.username + ')' : ''}`).join('\n')
-      );
-    }
-    target = candidates[0];
-  } else {
-    return bot.sendMessage(
-      chatId,
-      'Foydalanish: kimningdir xabariga javob (reply) qilib /somecall yozing, yoki /somecall <ism yoki @username>'
-    );
-  }
-
-  if (!target) {
-    return bot.sendMessage(chatId, 'Bu foydalanuvchi topilmadi.');
-  }
-  if (target.optOut) {
-    return bot.sendMessage(chatId, 'Bu foydalanuvchi tag qilinishdan bosh tortgan.');
-  }
-
-  const DEFAULT_STICKER = "CAACAgIAAxkBAAEExxxxxx...";
-  const INVISIBLE_CHAR = "‌";
-  
-  try {
-    // Agar foydalanuvchi o'ziga shaxsiy stiker o'rnatgan bo'lsa, o'shani ishlatamiz
-    const userSticker = target.stickerId || DEFAULT_STICKER;
-    
-    await bot.sendSticker(chatId, userSticker, {
-      caption: `<a href="tg://user?id=${target.id}">${INVISIBLE_CHAR}</a>`,
-      parse_mode: 'HTML'
-    });
-  } catch (err) {
-    console.error('somecall xatolik:', err.message);
-  }
+  await sendHiddenMentions(chatId, users);
 });
 
 bot.on('polling_error', (err) => {
@@ -299,7 +216,7 @@ bot.on('polling_error', (err) => {
 const app = express();
 
 app.get('/', (req, res) => {
-  res.send('Bot ishlayapti ✅ | ' + new Date().toISOString());
+  res.send('Bot status: OK ✅');
 });
 
 app.get('/ping', (req, res) => {
@@ -307,22 +224,15 @@ app.get('/ping', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server ${PORT}-portda ishga tushdi`);
+  console.log(`Server running on port ${PORT}`);
 });
 
 // ------- Self-ping tizimi -------
 const FIVE_MINUTES = 5 * 60 * 1000;
-
 function selfPing() {
-  if (!SELF_URL) {
-    console.warn('SELF_URL berilmagan — self-ping o\'tkazib yuborildi.');
-    return;
-  }
+  if (!SELF_URL) return;
   fetch(`${SELF_URL}/ping`)
     .then((res) => res.json())
-    .then((data) => console.log('Self-ping muvaffaqiyatli:', data.time))
-    .catch((err) => console.error('Self-ping xatosi:', err.message));
+    .catch((err) => console.error('Self-ping error:', err.message));
 }
-
 setInterval(selfPing, FIVE_MINUTES);
-console.log('Self-ping tizimi ishga tushdi.');
